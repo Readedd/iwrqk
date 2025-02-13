@@ -16,8 +16,8 @@ jobs:
   build_windows_exe:
     name: Build EXE
     runs-on: windows-latest
-    outputs:  # 关键点1：定义输出变量
-      artifact_name: ${{ steps.set_artifact.outputs.name }}
+    outputs:
+      artifact_name: ${{ steps.set_artifact_name.outputs.name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,28 +34,28 @@ jobs:
       - name: Build Windows EXE
         run: flutter build windows --release
 
-      - name: Verify file structure (关键点2：路径验证)
+      - name: Verify build files
         run: |
-          cd build/windows/runner/Release
-          ls -al  # 显示详细文件列表
-          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
+          # 确认文件路径包含 x64
+          ls -R build/windows/x64/runner/Release
+          [ -f build/windows/x64/runner/Release/${{ env.APP_NAME }}.exe ] || exit 1
 
-      - name: Generate unique artifact name
-        id: set_artifact
+      - name: Generate artifact name
+        id: set_artifact_name
         shell: bash
         run: |
           timestamp=$(date +%s)
-          echo "name=windows_${timestamp}_${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "name=windows-release-$timestamp-${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.set_artifact.outputs.name }}  # 关键点3：动态名称
+          name: ${{ steps.set_artifact_name.outputs.name }}
           path: |
-            build/windows/runner/Release/${{ env.APP_NAME }}.exe
-            build/windows/runner/Release/*.dll
-            build/windows/runner/Release/data/
-          if-no-files-found: error  # 关键点4：严格模式
+            build/windows/x64/runner/Release/${{ env.APP_NAME }}.exe
+            build/windows/x64/runner/Release/*.dll
+            build/windows/x64/runner/Release/data/**
+          if-no-files-found: error
 
   publish_release:
     needs: build_windows_exe
@@ -64,12 +64,7 @@ jobs:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build_windows_exe.outputs.artifact_name }}  # 关键点5：匹配动态名称
-
-      - name: Verify downloaded files
-        run: |
-          ls -R  # 递归显示文件结构
-          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
+          name: ${{ needs.build_windows_exe.outputs.artifact_name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -79,4 +74,3 @@ jobs:
             *.dll
             data/**/*
           tag_name: ${{ github.ref_name || 'manual-' + github.run_id }}
-          generate_release_notes: true
