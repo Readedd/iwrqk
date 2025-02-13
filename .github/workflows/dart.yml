@@ -67,11 +67,10 @@ jobs:
           name: ${{ needs.build_windows_exe.outputs.artifact_name }}
 
       - name: Create Release
-  uses: softprops/action-gh-release@v1
-  with:
-    files: |
-      ${{ env.APP_NAME }}.exe
-      *.dll
-      data/**/*
-    tag_name: ${{ github.ref_name || format('manual-{0}', github.run_id) }}  # 修正行
-    generate_release_notes: true
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ env.APP_NAME }}.exe
+            *.dll
+            data/**/*
+          tag_name: ${{ github.ref_name || ('manual-' + github.run_id) }}
