@@ -17,7 +17,7 @@ jobs:
     name: Build EXE
     runs-on: windows-latest
     outputs:
-      artifact_name: ${{ steps.set_artifact_name.outputs.name }}
+      artifact_name: ${{ steps.set_artifact.outputs.name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,26 +36,27 @@ jobs:
 
       - name: Verify build files
         run: |
-          # 确认文件路径包含 x64
-          ls -R build/windows/x64/runner/Release
-          [ -f build/windows/x64/runner/Release/${{ env.APP_NAME }}.exe ] || exit 1
+          cd build/windows/x64/runner/Release
+          ls -al
+          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
 
       - name: Generate artifact name
-        id: set_artifact_name
+        id: set_artifact
         shell: bash
         run: |
           timestamp=$(date +%s)
-          echo "name=windows-release-$timestamp-${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "name=windows_artifact_${timestamp}_${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.set_artifact_name.outputs.name }}
+          name: ${{ steps.set_artifact.outputs.name }}
           path: |
             build/windows/x64/runner/Release/${{ env.APP_NAME }}.exe
             build/windows/x64/runner/Release/*.dll
             build/windows/x64/runner/Release/data/**
           if-no-files-found: error
+          retention-days: 1
 
   publish_release:
     needs: build_windows_exe
@@ -66,6 +67,11 @@ jobs:
         with:
           name: ${{ needs.build_windows_exe.outputs.artifact_name }}
 
+      - name: Verify downloaded files
+        run: |
+          ls -R
+          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -73,4 +79,5 @@ jobs:
             ${{ env.APP_NAME }}.exe
             *.dll
             data/**/*
-          tag_name: ${{ github.ref_name || ('manual-' + github.run_id) }}
+          tag_name: ${{ github.ref_name || format('manual-{0}', github.run_id) }}
+          generate_release_notes: true
