@@ -16,8 +16,8 @@ jobs:
   build_windows_exe:
     name: Build EXE
     runs-on: windows-latest
-    outputs:
-      artifact_name: ${{ steps.set_artifact_name.outputs.name }}
+    outputs:  # 关键点1：定义输出变量
+      artifact_name: ${{ steps.set_artifact.outputs.name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,36 +32,30 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows EXE
-        run: |
-          flutter build windows --release
-          echo "Build completed at: $(date +'%Y-%m-%d %H:%M:%S')"
+        run: flutter build windows --release
 
-      - name: Verify build files
+      - name: Verify file structure (关键点2：路径验证)
         run: |
           cd build/windows/runner/Release
-          dir /s /b  # Windows 系统列出完整文件结构
-          if not exist "${{ env.APP_NAME }}.exe" (
-            echo "EXE file missing!" 
-            exit 1
-          )
+          ls -al  # 显示详细文件列表
+          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
 
-      - name: Generate artifact name
-        id: set_artifact_name
+      - name: Generate unique artifact name
+        id: set_artifact
         shell: bash
         run: |
-          timestamp=$(date +%Y%m%d-%H%M%S)
-          echo "name=windows-release-$timestamp-${{ github.run_id }}" >> $GITHUB_OUTPUT
+          timestamp=$(date +%s)
+          echo "name=windows_${timestamp}_${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.set_artifact_name.outputs.name }}
+          name: ${{ steps.set_artifact.outputs.name }}  # 关键点3：动态名称
           path: |
             build/windows/runner/Release/${{ env.APP_NAME }}.exe
             build/windows/runner/Release/*.dll
-            build/windows/runner/Release/data/**/*
-          if-no-files-found: error  # 严格模式：文件缺失时报错
-          retention-days: 1
+            build/windows/runner/Release/data/
+          if-no-files-found: error  # 关键点4：严格模式
 
   publish_release:
     needs: build_windows_exe
@@ -70,7 +64,12 @@ jobs:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build_windows_exe.outputs.artifact_name }}
+          name: ${{ needs.build_windows_exe.outputs.artifact_name }}  # 关键点5：匹配动态名称
+
+      - name: Verify downloaded files
+        run: |
+          ls -R  # 递归显示文件结构
+          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
