@@ -1,7 +1,10 @@
 name: Build Windows EXE
 
 on:
-  workflow_dispatch:  # 仅手动触发
+  workflow_dispatch:  # 手动触发
+  push:
+    tags:             # 标签触发（可选保留）
+      - v*
 
 env:
   APP_NAME: iwrqk
@@ -11,10 +14,11 @@ permissions:
 
 jobs:
   build_windows_exe:
+    name: Build EXE
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 同步升级 checkout 到 v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -25,18 +29,39 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build EXE
+      - name: Build Windows EXE
         run: flutter build windows --release
 
       - name: Get version
         id: get_version
         shell: bash
         run: |
-          echo "version=$(grep -m1 version: pubspec.yaml | awk '{print $2}' | sed 's/\"//g')" >> $GITHUB_OUTPUT
+          version=$(grep -m1 version: pubspec.yaml | awk '{print $2}' | sed 's/"//g')
+          echo "version=$version" >> $GITHUB_OUTPUT
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload EXE and Dependencies
+        uses: actions/upload-artifact@v4  # 升级到 v4
         with:
-          name: windows-exe
-          path: build/windows/runner/Release/*.exe  # 直接上传 EXE
-          retention-days: 3 # <= 这里可以设置保留天数
+          name: windows-release
+          path: |
+            build/windows/runner/Release/*.exe
+            build/windows/runner/Release/*.dll
+            build/windows/runner/Release/data/**
+
+  publish_release:
+    if: ${{ success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    needs: build_windows_exe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4  # 同步升级到 v4
+        with:
+          name: windows-release
+          path: release_files
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release_files/*
+          tag_name: ${{ github.ref_name || 'manual-' + github.run_id }}
+          generate_release_notes: true
