@@ -73,4 +73,4 @@ jobs:
             ${{ env.APP_NAME }}.exe
             *.dll
             data/**/*
-          tag_name: ${{ github.ref_name || 'manual-' + github.run_id }}
+         tag_name: ${{ github.ref_name || format('manual-{0}', github.run_id) }}
