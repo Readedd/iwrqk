@@ -1,9 +1,9 @@
 name: Build Windows EXE
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   push:
-    tags:             # 标签触发（可选保留）
+    tags:
       - v*
 
 env:
@@ -16,9 +16,11 @@ jobs:
   build_windows_exe:
     name: Build EXE
     runs-on: windows-latest
+    outputs:
+      artifact_name: ${{ steps.set_artifact_name.outputs.name }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # 同步升级 checkout 到 v4
+        uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -32,36 +34,43 @@ jobs:
       - name: Build Windows EXE
         run: flutter build windows --release
 
-      - name: Get version
-        id: get_version
+      - name: Verify build files
+        run: |
+          ls -R build/windows/runner/Release
+          [ -f build/windows/runner/Release/${{ env.APP_NAME }}.exe ] || exit 1
+
+      - name: Generate artifact name
+        id: set_artifact_name
         shell: bash
         run: |
-          version=$(grep -m1 version: pubspec.yaml | awk '{print $2}' | sed 's/"//g')
-          echo "version=$version" >> $GITHUB_OUTPUT
+          timestamp=$(date +%Y%m%d-%H%M%S)
+          echo "name=windows-release-$timestamp-${{ github.run_id }}" >> $GITHUB_OUTPUT
 
-      - name: Upload EXE and Dependencies
-        uses: actions/upload-artifact@v4  # 升级到 v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: windows-release
+          name: ${{ steps.set_artifact_name.outputs.name }}
           path: |
             build/windows/runner/Release/*.exe
             build/windows/runner/Release/*.dll
-            build/windows/runner/Release/data/**
+            build/windows/runner/Release/data/
+          retention-days: 1  # 自动清理旧产物
 
   publish_release:
-    if: ${{ success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     needs: build_windows_exe
     runs-on: ubuntu-latest
     steps:
       - name: Download Artifact
-        uses: actions/download-artifact@v4  # 同步升级到 v4
+        uses: actions/download-artifact@v4
         with:
-          name: windows-release
-          path: release_files
+          name: ${{ needs.build_windows_exe.outputs.artifact_name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: release_files/*
-          tag_name: ${{ github.ref_name || 'manual-' }}${{ github.run_id }}
+          files: |
+            ${{ env.APP_NAME }}.exe
+            *.dll
+            data/**/*
+          tag_name: ${{ github.ref_name || 'manual-' + github.run_id }}
           generate_release_notes: true
