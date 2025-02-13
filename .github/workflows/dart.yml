@@ -35,10 +35,14 @@ jobs:
         run: flutter build windows --release
 
       - name: Verify build files
+        shell: pwsh  # 显式声明使用 PowerShell
         run: |
           cd build/windows/x64/runner/Release
-          ls -al
-          [ -f "${{ env.APP_NAME }}.exe" ] || exit 1
+          Get-ChildItem  # 替代 ls -al
+          if (-not (Test-Path "${{ env.APP_NAME }}.exe")) { 
+              Write-Error "EXE file missing!"
+              exit 1 
+          }
 
       - name: Generate artifact name
         id: set_artifact
